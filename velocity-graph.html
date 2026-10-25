@@ -22,6 +22,8 @@ label{color:var(--mut);font-size:14px}
 .hd b{font-size:16px}
 .hd span{color:var(--mut);font-size:14px;font-variant-numeric:tabular-nums}
 canvas{width:100%;height:200px;background:var(--card);border:1px solid var(--line);border-radius:12px;display:block}
+.met{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:12px}
+.met .row{margin:0}
 .hint{color:var(--mut);font-size:13px;margin-top:10px}
 </style>
 </head>
@@ -35,6 +37,13 @@ canvas{width:100%;height:200px;background:var(--card);border:1px solid var(--lin
 <button id="clr">Сбросить</button>
 </div>
 <div id="st">Нажмите «Подключить MIDI».</div>
+<div class="met">
+<div class="row">
+<b>Метроном FP-10</b>
+<button class="p" id="fp">Вкл/выкл</button>
+</div>
+<div id="fs" style="color:var(--mut);font-size:13px;margin-top:6px">Команда экспериментальная: формат взят от Roland FP-30, на FP-10 может не сработать.</div>
+</div>
 <div class="hd"><b id="tl">Левая рука</b><span id="sl">–</span></div>
 <canvas id="cl"></canvas>
 <div class="hd"><b id="tr">Правая рука</b><span id="sr">–</span></div>
@@ -111,12 +120,37 @@ $('sp').onchange=function(){split=+this.value;C=[];render()};
 $('wn').onchange=function(){WIN=+this.value};
 $('go').onclick=function(){
 if(!navigator.requestMIDIAccess){$('st').textContent='Этот браузер не поддерживает Web MIDI. Откройте страницу в Chrome.';return}
-navigator.requestMIDIAccess().then(function(a){
-acc=a;cur='all';a.onstatechange=fill;fill();
+navigator.requestMIDIAccess({sysex:true}).catch(function(){return navigator.requestMIDIAccess()}).then(function(a){
+acc=a;sx=!!a.sysexEnabled;cur='all';a.onstatechange=fill;fill();
 }).catch(function(e){$('st').textContent='Нет доступа к MIDI: '+(e&&e.message?e.message:e)});
 };
 $('dev').onchange=function(){cur=this.value;bind()};
 $('clr').onclick=function(){C=[];render()};
+
+var sx=false;
+function outs(){
+if(!acc)return [];
+var o=[];acc.outputs.forEach(function(x){o.push(x)});
+if(cur&&cur!=='all'){var inp=null;acc.inputs.forEach(function(i){if(i.id===cur)inp=i});
+if(inp){var m=o.filter(function(x){return x.name===inp.name});if(m.length)return m}}
+return o;
+}
+function syx(addr,data){
+var sum=0;addr.concat(data).forEach(function(b){sum+=b});
+var m=[0xF0,0x41,0x10,0x00,0x00,0x00,0x28,0x12].concat(addr,data,[(128-sum%128)%128,0xF7]);
+outs().forEach(function(o){o.send(m)});
+}
+function fpMet(){
+var f=$('fs');
+if(!acc){f.textContent='Сначала нажмите «Подключить MIDI».';return}
+if(!sx){f.textContent='Браузер не дал доступ к SysEx, команду отправить нельзя. Перезагрузите страницу и разрешите SysEx.';return}
+var o=outs();
+if(!o.length){f.textContent='Нет выходного MIDI-порта FP-10.';return}
+syx([1,0,3,6],[1]);
+setTimeout(function(){syx([1,0,5,9],[0])},80);
+f.textContent='Команда отправлена ('+o.map(function(x){return x.name}).join(', ')+'). Если метроном FP-10 не включился, значит FP-10 понимает другой формат.';
+}
+$('fp').onclick=fpMet;
 window.addEventListener('resize',render);
 render();
 })();
