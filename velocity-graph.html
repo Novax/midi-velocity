@@ -42,6 +42,13 @@ canvas{width:100%;height:200px;background:var(--card);border:1px solid var(--lin
 <b>Метроном FP-10</b>
 <button class="p" id="fp">Вкл/выкл</button>
 </div>
+<div class="row" style="margin-top:10px">
+<span style="color:var(--mut);font-size:14px">Темп:</span>
+<button id="bm" aria-label="Медленнее">−</button>
+<input type="number" id="bpm" min="10" max="500" value="80" inputmode="numeric" aria-label="Темп, уд/мин" style="font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 6px;width:76px;text-align:center">
+<button id="bp" aria-label="Быстрее">+</button>
+<span style="color:var(--mut);font-size:14px">уд/мин</span>
+</div>
 <div id="fs" style="color:var(--mut);font-size:13px;margin-top:6px">Команда экспериментальная: формат взят от Roland FP-30, на FP-10 может не сработать.</div>
 </div>
 <div class="hd"><b id="tl">Левая рука</b><span id="sl">–</span></div>
@@ -150,6 +157,20 @@ syx([1,0,3,6],[1]);
 setTimeout(function(){syx([1,0,5,9],[0])},80);
 f.textContent='Команда отправлена ('+o.map(function(x){return x.name}).join(', ')+'). Если метроном FP-10 не включился, значит FP-10 понимает другой формат.';
 }
+var BPM=80;
+function setTempo(v){
+var f=$('fs');
+v=Math.max(10,Math.min(500,Math.round(+v)||BPM));BPM=v;$('bpm').value=v;
+if(!acc){f.textContent='Сначала нажмите «Подключить MIDI».';return}
+if(!sx){f.textContent='Браузер не дал доступ к SysEx, команду отправить нельзя. Перезагрузите страницу и разрешите SysEx.';return}
+if(!outs().length){f.textContent='Нет выходного MIDI-порта FP-10.';return}
+syx([1,0,3,6],[1]);
+setTimeout(function(){syx([1,0,3,9],[v>>7,v&127])},60);
+f.textContent='Темп '+v+' отправлен на FP-10. Текущий темп пианино страница не читает, показано последнее отправленное значение.';
+}
+$('bm').onclick=function(){setTempo(BPM-1)};
+$('bp').onclick=function(){setTempo(BPM+1)};
+$('bpm').onchange=function(){setTempo(this.value)};
 $('fp').onclick=fpMet;
 window.addEventListener('resize',render);
 render();
