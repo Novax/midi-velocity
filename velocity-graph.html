@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MIDI Velocity</title>
+<style>
+:root{--bg:#fafaf7;--fg:#1c1c1a;--mut:#6b6b66;--card:#fff;--line:#d9d9d2;--acc:#2a6fdb;--lo:#3b9b6b;--hi:#d9573b;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#151514;--fg:#ecece6;--mut:#9a9a92;--card:#1f1f1d;--line:#34342f;--acc:#6aa3ff;--lo:#5cc08c;--hi:#ff8466}}
+:root[data-theme="dark"]{--bg:#151514;--fg:#ecece6;--mut:#9a9a92;--card:#1f1f1d;--line:#34342f;--acc:#6aa3ff;--lo:#5cc08c;--hi:#ff8466}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:16px;max-width:760px;margin-inline:auto}
+h1{font-size:20px;margin:0 0 12px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+button,select{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
+button.p{background:var(--acc);border-color:var(--acc);color:#fff}
+#st{color:var(--mut);font-size:14px;margin-bottom:12px}
+.big{display:flex;gap:8px;margin-bottom:12px}
+.c{flex:1;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.c b{display:block;font-size:28px;font-variant-numeric:tabular-nums}
+.c span{color:var(--mut);font-size:12px}
+canvas{width:100%;height:260px;background:var(--card);border:1px solid var(--line);border-radius:12px;display:block}
+.hint{color:var(--mut);font-size:13px;margin-top:10px}
+</style>
+</head>
+<body>
+<h1>Velocity нажатий</h1>
+<div class="row">
+<button class="p" id="go">Подключить MIDI</button>
+<select id="dev" aria-label="Устройство"></select>
+<button id="clr">Сбросить</button>
+</div>
+<div id="st">Нажмите «Подключить MIDI».</div>
+<div class="big">
+<div class="c"><span>Последняя</span><b id="l">–</b></div>
+<div class="c"><span>Среднее</span><b id="a">–</b></div>
+<div class="c"><span>Мин / Макс</span><b id="m">–</b></div>
+</div>
+<canvas id="cv"></canvas>
+<div class="hint">Каждый столбик — одно нажатие (последние 40). Цвет: от зелёного (слабо) к красному (сильно). Подпись под столбиком — нота.</div>
+<script>
+(function(){
+var NAMES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+var hits=[],MAX=40,acc=null,cur=null;
+var $=function(i){return document.getElementById(i)};
+var cv=$('cv'),ctx=cv.getContext('2d');
+function css(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+function name(n){return NAMES[n%12]+(Math.floor(n/12)-1)}
+function mix(a,b,t){return Math.round(a+(b-a)*t)}
+function col(v){var t=v/127;return 'rgb('+mix(59,217,t)+','+mix(155,87,t)+','+mix(107,59,t)+')'}
+function draw(){
+var dpr=window.devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;
+cv.width=w*dpr;cv.height=h*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
+ctx.clearRect(0,0,w,h);
+var L=30,B=22,T=8,R=6,ph=h-B-T,pw=w-L-R;
+ctx.font='11px system-ui,sans-serif';ctx.fillStyle=css('--mut');ctx.strokeStyle=css('--line');ctx.lineWidth=1;
+[0,32,64,96,127].forEach(function(v){var y=T+ph-ph*v/127;ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(w-R,y);ctx.stroke();ctx.textAlign='right';ctx.fillText(v,L-4,y+4)});
+var bw=pw/MAX;
+hits.forEach(function(e,i){
+var x=L+i*bw+bw*0.12,bh=ph*e.v/127;
+ctx.fillStyle=col(e.v);ctx.fillRect(x,T+ph-bh,bw*0.76,bh);
+if(bw>16){ctx.fillStyle=css('--fg');ctx.textAlign='center';ctx.fillText(e.v,x+bw*0.38,T+ph-bh-3)}
+ctx.save();ctx.fillStyle=css('--mut');ctx.font='9px system-ui,sans-serif';ctx.textAlign='center';ctx.fillText(e.n,x+bw*0.38,h-8);ctx.restore();
+});
+}
+function stats(){
+if(!hits.length){$('l').textContent=$('a').textContent=$('m').textContent='–';return}
+var vs=hits.map(function(e){return e.v});
+var s=vs.reduce(function(p,c){return p+c},0)/vs.length;
+$('l').textContent=vs[vs.length-1];
+$('a').textContent=Math.round(s);
+$('m').textContent=Math.min.apply(null,vs)+' / '+Math.max.apply(null,vs);
+}
+function onMsg(ev){
+var d=ev.data;if(d.length<3)return;
+if((d[0]&0xF0)===0x90&&d[2]>0){
+hits.push({v:d[2],n:name(d[1])});if(hits.length>MAX)hits.shift();
+stats();draw();
+}
+}
+function bind(){
+if(!acc)return;
+acc.inputs.forEach(function(i){i.onmidimessage=null});
+acc.inputs.forEach(function(i){if(cur==='all'||i.id===cur)i.onmidimessage=onMsg});
+}
+function fill(){
+var sel=$('dev');sel.innerHTML='';
+var o=document.createElement('option');o.value='all';o.textContent='Все устройства';sel.appendChild(o);
+var n=0;
+acc.inputs.forEach(function(i){n++;var x=document.createElement('option');x.value=i.id;x.textContent=i.name||i.id;sel.appendChild(x)});
+sel.value=cur&&[].some.call(sel.options,function(x){return x.value===cur})?cur:'all';
+cur=sel.value;
+$('st').textContent=n?('Устройств: '+n+'. Сыграйте ноту.'):'MIDI доступен, но устройств нет. Подключите пианино (USB или BLE MIDI).';
+bind();
+}
+$('go').onclick=function(){
+if(!navigator.requestMIDIAccess){$('st').textContent='Этот браузер не поддерживает Web MIDI. Откройте страницу в Chrome.';return}
+navigator.requestMIDIAccess().then(function(a){
+acc=a;cur='all';a.onstatechange=fill;fill();
+}).catch(function(e){$('st').textContent='Нет доступа к MIDI: '+(e&&e.message?e.message:e)});
+};
+$('dev').onchange=function(){cur=this.value;bind()};
+$('clr').onclick=function(){hits=[];stats();draw()};
+window.addEventListener('resize',draw);
+draw();
+})();
+</script>
+</body>
+</html>
