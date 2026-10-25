@@ -5,79 +5,90 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>MIDI Velocity</title>
 <style>
-:root{--bg:#fafaf7;--fg:#1c1c1a;--mut:#6b6b66;--card:#fff;--line:#d9d9d2;--acc:#2a6fdb;--lo:#3b9b6b;--hi:#d9573b;
+:root{--bg:#fafaf7;--fg:#1c1c1a;--mut:#6b6b66;--card:#fff;--line:#d9d9d2;--acc:#2a6fdb;
 box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#151514;--fg:#ecece6;--mut:#9a9a92;--card:#1f1f1d;--line:#34342f;--acc:#6aa3ff;--lo:#5cc08c;--hi:#ff8466}}
-:root[data-theme="dark"]{--bg:#151514;--fg:#ecece6;--mut:#9a9a92;--card:#1f1f1d;--line:#34342f;--acc:#6aa3ff;--lo:#5cc08c;--hi:#ff8466}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#151514;--fg:#ecece6;--mut:#9a9a92;--card:#1f1f1d;--line:#34342f;--acc:#6aa3ff}}
+:root[data-theme="dark"]{--bg:#151514;--fg:#ecece6;--mut:#9a9a92;--card:#1f1f1d;--line:#34342f;--acc:#6aa3ff}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:16px;max-width:760px;margin-inline:auto}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:16px;max-width:900px;margin-inline:auto}
 h1{font-size:20px;margin:0 0 12px}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
 button,select{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px}
 button.p{background:var(--acc);border-color:var(--acc);color:#fff}
+label{color:var(--mut);font-size:14px}
 #st{color:var(--mut);font-size:14px;margin-bottom:12px}
-.big{display:flex;gap:8px;margin-bottom:12px}
-.c{flex:1;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
-.c b{display:block;font-size:28px;font-variant-numeric:tabular-nums}
-.c span{color:var(--mut);font-size:12px}
-canvas{width:100%;height:260px;background:var(--card);border:1px solid var(--line);border-radius:12px;display:block}
+.hd{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;margin:10px 0 6px}
+.hd b{font-size:16px}
+.hd span{color:var(--mut);font-size:14px;font-variant-numeric:tabular-nums}
+canvas{width:100%;height:200px;background:var(--card);border:1px solid var(--line);border-radius:12px;display:block}
 .hint{color:var(--mut);font-size:13px;margin-top:10px}
 </style>
 </head>
 <body>
-<h1>Velocity нажатий</h1>
+<h1>Velocity нажатий: левая и правая рука</h1>
 <div class="row">
 <button class="p" id="go">Подключить MIDI</button>
 <select id="dev" aria-label="Устройство"></select>
+<label>Граница рук: <select id="sp" aria-label="Граница"></select></label>
+<label>Одновременность: <select id="wn" aria-label="Окно"><option value="50">50 мс</option><option value="80" selected>80 мс</option><option value="120">120 мс</option><option value="200">200 мс</option></select></label>
 <button id="clr">Сбросить</button>
 </div>
 <div id="st">Нажмите «Подключить MIDI».</div>
-<div class="big">
-<div class="c"><span>Последняя</span><b id="l">–</b></div>
-<div class="c"><span>Среднее</span><b id="a">–</b></div>
-<div class="c"><span>Мин / Макс</span><b id="m">–</b></div>
-</div>
-<canvas id="cv"></canvas>
-<div class="hint">Каждый столбик — одно нажатие (последние 40). Цвет: от зелёного (слабо) к красному (сильно). Подпись под столбиком — нота.</div>
+<div class="hd"><b id="tl">Левая рука</b><span id="sl">–</span></div>
+<canvas id="cl"></canvas>
+<div class="hd"><b id="tr">Правая рука</b><span id="sr">–</span></div>
+<canvas id="cr"></canvas>
+<div class="hint">Пианино не сообщает, какой рукой нажата клавиша, поэтому руки делятся по ноте: ниже границы — левая, от границы и выше — правая. Графики синхронизированы по времени: нажатия, сыгранные почти одновременно (в пределах окна «Одновременность»), попадают в один и тот же столбец, а если одной рукой не играли — там остаётся пропуск (точка). Если в одной руке несколько нот сразу (аккорд), показана самая сильная, под ней «+N». Последние 30 столбцов.</div>
 <script>
 (function(){
 var NAMES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
-var hits=[],MAX=40,acc=null,cur=null;
+var MAX=30,acc=null,cur=null,split=60;
+var C=[],WIN=80;
 var $=function(i){return document.getElementById(i)};
-var cv=$('cv'),ctx=cv.getContext('2d');
 function css(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
 function name(n){return NAMES[n%12]+(Math.floor(n/12)-1)}
 function mix(a,b,t){return Math.round(a+(b-a)*t)}
 function col(v){var t=v/127;return 'rgb('+mix(59,217,t)+','+mix(155,87,t)+','+mix(107,59,t)+')'}
-function draw(){
-var dpr=window.devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;
+function draw(cv,k){
+var ctx=cv.getContext('2d'),dpr=window.devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;
 cv.width=w*dpr;cv.height=h*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
 ctx.clearRect(0,0,w,h);
-var L=30,B=22,T=8,R=6,ph=h-B-T,pw=w-L-R;
+var L=30,B=22,T=14,R=6,ph=h-B-T,pw=w-L-R;
 ctx.font='11px system-ui,sans-serif';ctx.fillStyle=css('--mut');ctx.strokeStyle=css('--line');ctx.lineWidth=1;
 [0,32,64,96,127].forEach(function(v){var y=T+ph-ph*v/127;ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(w-R,y);ctx.stroke();ctx.textAlign='right';ctx.fillText(v,L-4,y+4)});
 var bw=pw/MAX;
-hits.forEach(function(e,i){
-var x=L+i*bw+bw*0.12,bh=ph*e.v/127;
+C.forEach(function(c,i){
+var e=c[k],x=L+i*bw+bw*0.12,cx=x+bw*0.38;
+if(!e){ctx.fillStyle=css('--line');ctx.beginPath();ctx.arc(cx,T+ph-3,2.5,0,6.283);ctx.fill();return}
+var bh=ph*e.v/127;
 ctx.fillStyle=col(e.v);ctx.fillRect(x,T+ph-bh,bw*0.76,bh);
-if(bw>16){ctx.fillStyle=css('--fg');ctx.textAlign='center';ctx.fillText(e.v,x+bw*0.38,T+ph-bh-3)}
-ctx.save();ctx.fillStyle=css('--mut');ctx.font='9px system-ui,sans-serif';ctx.textAlign='center';ctx.fillText(e.n,x+bw*0.38,h-8);ctx.restore();
+if(bw>14){ctx.fillStyle=css('--fg');ctx.textAlign='center';ctx.fillText(e.v,cx,T+ph-bh-3)}
+ctx.fillStyle=css('--mut');ctx.font='9px system-ui,sans-serif';ctx.textAlign='center';ctx.fillText(e.n+(e.c>1?'+'+(e.c-1):''),cx,h-8);ctx.font='11px system-ui,sans-serif';
 });
 }
-function stats(){
-if(!hits.length){$('l').textContent=$('a').textContent=$('m').textContent='–';return}
-var vs=hits.map(function(e){return e.v});
+function stat(k){
+var vs=C.filter(function(c){return c[k]}).map(function(c){return c[k].v});
+if(!vs.length)return '–';
 var s=vs.reduce(function(p,c){return p+c},0)/vs.length;
-$('l').textContent=vs[vs.length-1];
-$('a').textContent=Math.round(s);
-$('m').textContent=Math.min.apply(null,vs)+' / '+Math.max.apply(null,vs);
+return 'последняя '+vs[vs.length-1]+' · среднее '+Math.round(s)+' · мин '+Math.min.apply(null,vs)+' · макс '+Math.max.apply(null,vs);
+}
+function render(){
+draw($('cl'),'l');draw($('cr'),'r');
+$('sl').textContent=stat('l');$('sr').textContent=stat('r');
+$('tl').textContent='Левая рука (ниже '+name(split)+')';
+$('tr').textContent='Правая рука ('+name(split)+' и выше)';
 }
 function onMsg(ev){
 var d=ev.data;if(d.length<3)return;
 if((d[0]&0xF0)===0x90&&d[2]>0){
-hits.push({v:d[2],n:name(d[1])});if(hits.length>MAX)hits.shift();
-stats();draw();
+var k=d[1]<split?'l':'r',now=ev.timeStamp||performance.now(),v=d[2],n=name(d[1]);
+var last=C[C.length-1];
+if(!last||now-last.t>WIN){last={t:now,l:null,r:null};C.push(last);if(C.length>MAX)C.shift()}
+var e=last[k];
+if(!e)last[k]={v:v,n:n,c:1};
+else{e.c++;if(v>e.v){e.v=v;e.n=n}}
+render();
 }
 }
 function bind(){
@@ -95,6 +106,9 @@ cur=sel.value;
 $('st').textContent=n?('Устройств: '+n+'. Сыграйте ноту.'):'MIDI доступен, но устройств нет. Подключите пианино (USB или BLE MIDI).';
 bind();
 }
+(function(){var s=$('sp');for(var n=48;n<=72;n++){var o=document.createElement('option');o.value=n;o.textContent=name(n)+(n===60?' (до первой октавы)':'');s.appendChild(o)}s.value=60})();
+$('sp').onchange=function(){split=+this.value;C=[];render()};
+$('wn').onchange=function(){WIN=+this.value};
 $('go').onclick=function(){
 if(!navigator.requestMIDIAccess){$('st').textContent='Этот браузер не поддерживает Web MIDI. Откройте страницу в Chrome.';return}
 navigator.requestMIDIAccess().then(function(a){
@@ -102,9 +116,9 @@ acc=a;cur='all';a.onstatechange=fill;fill();
 }).catch(function(e){$('st').textContent='Нет доступа к MIDI: '+(e&&e.message?e.message:e)});
 };
 $('dev').onchange=function(){cur=this.value;bind()};
-$('clr').onclick=function(){hits=[];stats();draw()};
-window.addEventListener('resize',draw);
-draw();
+$('clr').onclick=function(){C=[];render()};
+window.addEventListener('resize',render);
+render();
 })();
 </script>
 </body>
