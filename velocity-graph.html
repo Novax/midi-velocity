@@ -39,23 +39,21 @@ canvas{width:100%;height:200px;background:var(--card);border:1px solid var(--lin
 <div id="st">Нажмите «Подключить MIDI».</div>
 <div class="met">
 <div class="row">
-<b>Метроном FP-10</b>
-<button class="p" id="fp">Вкл/выкл</button>
-</div>
-<div class="row" style="margin-top:10px">
+<span role="img" aria-label="Метроном FP-10" title="Метроном FP-10" style="display:inline-flex;color:var(--fg)"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21L10 3h4l2 18z"/><path d="M12 17L16.5 6"/><circle cx="15.2" cy="9" r="1.3" fill="currentColor"/><path d="M6.5 21h11"/></svg></span>
 <span style="color:var(--mut);font-size:14px">Темп:</span>
 <button id="bm" aria-label="Медленнее">−</button>
 <input type="number" id="bpm" min="10" max="500" value="80" inputmode="numeric" aria-label="Темп, уд/мин" style="font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 6px;width:76px;text-align:center">
 <button id="bp" aria-label="Быстрее">+</button>
 <span style="color:var(--mut);font-size:14px">уд/мин</span>
+<button class="p" id="fp">Вкл/выкл</button>
 </div>
 <div id="fs" style="color:var(--mut);font-size:13px;margin-top:6px">Команда экспериментальная: формат взят от Roland FP-30, на FP-10 может не сработать.</div>
 </div>
-<div class="hd"><b id="tl">Левая рука</b><span id="sl">–</span></div>
-<canvas id="cl"></canvas>
 <div class="hd"><b id="tr">Правая рука</b><span id="sr">–</span></div>
 <canvas id="cr"></canvas>
-<div class="hint">Пианино не сообщает, какой рукой нажата клавиша, поэтому руки делятся по ноте: ниже границы — левая, от границы и выше — правая. Графики синхронизированы по времени: нажатия, сыгранные почти одновременно (в пределах окна «Одновременность»), попадают в один и тот же столбец, а если одной рукой не играли — там остаётся пропуск (точка). Если в одной руке несколько нот сразу (аккорд), показана самая сильная, под ней «+N». Последние 30 столбцов.</div>
+<div class="hd"><b id="tl">Левая рука</b><span id="sl">–</span></div>
+<canvas id="cl"></canvas>
+<div class="hint">Пианино не сообщает, какой рукой нажата клавиша, поэтому руки делятся по ноте: ниже границы — левая, от границы и выше — правая. Графики синхронизированы по времени: нажатия, сыгранные почти одновременно (в пределах окна «Одновременность»), попадают в один и тот же столбец, а если одной рукой не играли — там остаётся пропуск (точка). Если в одной руке несколько нот сразу (аккорд), показана самая сильная, под ней «+N». Последние 30 столбцов. Нижняя строка под нижним графиком — темп в уд/мин между этим и предыдущим столбцом (если считать каждое нажатие одной долей; восьмые под метроном в четвертях покажут вдвое больше).</div>
 <script>
 (function(){
 var NAMES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
@@ -66,11 +64,11 @@ function css(n){return getComputedStyle(document.documentElement).getPropertyVal
 function name(n){return NAMES[n%12]+(Math.floor(n/12)-1)}
 function mix(a,b,t){return Math.round(a+(b-a)*t)}
 function col(v){var t=v/127;return 'rgb('+mix(59,217,t)+','+mix(155,87,t)+','+mix(107,59,t)+')'}
-function draw(cv,k){
+function draw(cv,k,tp){
 var ctx=cv.getContext('2d'),dpr=window.devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;
 cv.width=w*dpr;cv.height=h*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
 ctx.clearRect(0,0,w,h);
-var L=30,B=22,T=14,R=6,ph=h-B-T,pw=w-L-R;
+var L=30,B=tp?38:22,T=14,R=6,ph=h-B-T,pw=w-L-R;
 ctx.font='11px system-ui,sans-serif';ctx.fillStyle=css('--mut');ctx.strokeStyle=css('--line');ctx.lineWidth=1;
 [0,32,64,96,127].forEach(function(v){var y=T+ph-ph*v/127;ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(w-R,y);ctx.stroke();ctx.textAlign='right';ctx.fillText(v,L-4,y+4)});
 var bw=pw/MAX;
@@ -80,8 +78,18 @@ if(!e){ctx.fillStyle=css('--line');ctx.beginPath();ctx.arc(cx,T+ph-3,2.5,0,6.283
 var bh=ph*e.v/127;
 ctx.fillStyle=col(e.v);ctx.fillRect(x,T+ph-bh,bw*0.76,bh);
 if(bw>14){ctx.fillStyle=css('--fg');ctx.textAlign='center';ctx.fillText(e.v,cx,T+ph-bh-3)}
-ctx.fillStyle=css('--mut');ctx.font='9px system-ui,sans-serif';ctx.textAlign='center';ctx.fillText(e.n+(e.c>1?'+'+(e.c-1):''),cx,h-8);ctx.font='11px system-ui,sans-serif';
+ctx.fillStyle=css('--mut');ctx.font='9px system-ui,sans-serif';ctx.textAlign='center';ctx.fillText(e.n+(e.c>1?'+'+(e.c-1):''),cx,T+ph+13);ctx.font='11px system-ui,sans-serif';
 });
+if(tp){
+ctx.font='11px system-ui,sans-serif';ctx.textAlign='right';ctx.fillStyle=css('--mut');
+ctx.fillText('уд/мин',L-2,h-6);
+ctx.textAlign='center';ctx.fillStyle=css('--fg');
+C.forEach(function(c,i){
+if(!i)return;
+var dt=c.t-C[i-1].t,b=dt>0?Math.round(60000/dt):0;
+ctx.fillText(b>=10&&b<=400?b:'–',L+i*bw+bw*0.5,h-6);
+});
+}
 }
 function stat(k){
 var vs=C.filter(function(c){return c[k]}).map(function(c){return c[k].v});
@@ -90,7 +98,7 @@ var s=vs.reduce(function(p,c){return p+c},0)/vs.length;
 return 'последняя '+vs[vs.length-1]+' · среднее '+Math.round(s)+' · мин '+Math.min.apply(null,vs)+' · макс '+Math.max.apply(null,vs);
 }
 function render(){
-draw($('cl'),'l');draw($('cr'),'r');
+draw($('cl'),'l',true);draw($('cr'),'r');
 $('sl').textContent=stat('l');$('sr').textContent=stat('r');
 $('tl').textContent='Левая рука (ниже '+name(split)+')';
 $('tr').textContent='Правая рука ('+name(split)+' и выше)';
