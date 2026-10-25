@@ -18,12 +18,13 @@ button,select{font:inherit;color:var(--fg);background:var(--card);border:1px sol
 button.p{background:var(--acc);border-color:var(--acc);color:#fff}
 label{color:var(--mut);font-size:14px}
 #st{color:var(--mut);font-size:14px;margin-bottom:12px}
-.hd{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;margin:10px 0 6px}
+.hd{display:flex;justify-content:flex-start;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0 6px}
 .hd b{font-size:16px}
 .hd span{color:var(--mut);font-size:14px;font-variant-numeric:tabular-nums}
 canvas{width:100%;height:200px;background:var(--card);border:1px solid var(--line);border-radius:12px;display:block}
 .met{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:12px}
 .met .row{margin:0}
+.xs{padding:3px 10px;font-size:13px;border-radius:8px}
 .hint{color:var(--mut);font-size:13px;margin-top:10px}
 </style>
 </head>
@@ -34,7 +35,7 @@ canvas{width:100%;height:200px;background:var(--card);border:1px solid var(--lin
 <select id="dev" aria-label="Устройство"></select>
 <label>Граница рук: <select id="sp" aria-label="Граница"></select></label>
 <label>Одновременность: <select id="wn" aria-label="Окно"><option value="50">50 мс</option><option value="80" selected>80 мс</option><option value="120">120 мс</option><option value="200">200 мс</option></select></label>
-<button id="clr">Сбросить</button>
+<label>Пауза: <select id="ps" aria-label="Длинная пауза"><option value="1000">1 с</option><option value="2000" selected>2 с</option><option value="3000">3 с</option><option value="5000">5 с</option></select></label>
 </div>
 <div id="st">Нажмите «Подключить MIDI».</div>
 <div class="met">
@@ -47,18 +48,17 @@ canvas{width:100%;height:200px;background:var(--card);border:1px solid var(--lin
 <span style="color:var(--mut);font-size:14px">уд/мин</span>
 <button class="p" id="fp">Вкл/выкл</button>
 </div>
-<div id="fs" style="color:var(--mut);font-size:13px;margin-top:6px">Команда экспериментальная: формат взят от Roland FP-30, на FP-10 может не сработать.</div>
+<div id="fs" style="color:var(--mut);font-size:13px;margin-top:6px"></div>
 </div>
-<div class="hd"><b id="tr">Правая рука</b><span id="sr">–</span></div>
+<div class="hd"><b id="tr">Правая рука</b><button id="clr" class="xs">Сбросить</button></div>
 <canvas id="cr"></canvas>
-<div class="hd"><b id="tl">Левая рука</b><span id="sl">–</span></div>
 <canvas id="cl"></canvas>
-<div class="hint">Пианино не сообщает, какой рукой нажата клавиша, поэтому руки делятся по ноте: ниже границы — левая, от границы и выше — правая. Графики синхронизированы по времени: нажатия, сыгранные почти одновременно (в пределах окна «Одновременность»), попадают в один и тот же столбец, а если одной рукой не играли — там остаётся пропуск (точка). Если в одной руке несколько нот сразу (аккорд), показана самая сильная, под ней «+N». Последние 30 столбцов. Нижняя строка под нижним графиком — темп в уд/мин между этим и предыдущим столбцом (если считать каждое нажатие одной долей; восьмые под метроном в четвертях покажут вдвое больше).</div>
+<div class="hint">Пианино не сообщает, какой рукой нажата клавиша, поэтому руки делятся по ноте: ниже границы — левая, от границы и выше — правая. Графики синхронизированы по времени: нажатия, сыгранные почти одновременно (в пределах окна «Одновременность»), попадают в один и тот же столбец, а если одной рукой не играли — там остаётся пропуск (точка). Если в одной руке несколько нот сразу (аккорд), показана самая сильная, под ней «+N». Пунктирная вертикальная линия означает длинную паузу (порог выбирается в списке «Пауза»). Последние 30 столбцов. Верхняя строка над верхним графиком — темп в уд/мин между этим и предыдущим столбцом (если считать каждое нажатие одной долей; восьмые под метроном в четвертях покажут вдвое больше).</div>
 <script>
 (function(){
 var NAMES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 var MAX=30,acc=null,cur=null,split=60;
-var C=[],WIN=80;
+var C=[],WIN=80,PAUSE=2000;
 var $=function(i){return document.getElementById(i)};
 function css(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
 function name(n){return NAMES[n%12]+(Math.floor(n/12)-1)}
@@ -68,7 +68,7 @@ function draw(cv,k,tp){
 var ctx=cv.getContext('2d'),dpr=window.devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;
 cv.width=w*dpr;cv.height=h*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
 ctx.clearRect(0,0,w,h);
-var L=30,B=tp?38:22,T=14,R=6,ph=h-B-T,pw=w-L-R;
+var L=30,B=22,T=tp?30:14,R=6,ph=h-B-T,pw=w-L-R;
 ctx.font='11px system-ui,sans-serif';ctx.fillStyle=css('--mut');ctx.strokeStyle=css('--line');ctx.lineWidth=1;
 [0,32,64,96,127].forEach(function(v){var y=T+ph-ph*v/127;ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(w-R,y);ctx.stroke();ctx.textAlign='right';ctx.fillText(v,L-4,y+4)});
 var bw=pw/MAX;
@@ -80,27 +80,24 @@ ctx.fillStyle=col(e.v);ctx.fillRect(x,T+ph-bh,bw*0.76,bh);
 if(bw>14){ctx.fillStyle=css('--fg');ctx.textAlign='center';ctx.fillText(e.v,cx,T+ph-bh-3)}
 ctx.fillStyle=css('--mut');ctx.font='9px system-ui,sans-serif';ctx.textAlign='center';ctx.fillText(e.n+(e.c>1?'+'+(e.c-1):''),cx,T+ph+13);ctx.font='11px system-ui,sans-serif';
 });
+ctx.save();ctx.strokeStyle=css('--acc');ctx.lineWidth=1.5;ctx.setLineDash([4,3]);
+C.forEach(function(c,i){
+if(i&&c.t-C[i-1].t>PAUSE){var x=L+i*bw;ctx.beginPath();ctx.moveTo(x,tp?16:T-6);ctx.lineTo(x,T+ph);ctx.stroke()}
+});
+ctx.restore();
 if(tp){
 ctx.font='11px system-ui,sans-serif';ctx.textAlign='right';ctx.fillStyle=css('--mut');
-ctx.fillText('уд/мин',L-2,h-6);
+ctx.fillText('уд/мин',L-2,14);
 ctx.textAlign='center';ctx.fillStyle=css('--fg');
 C.forEach(function(c,i){
 if(!i)return;
-var dt=c.t-C[i-1].t,b=dt>0?Math.round(60000/dt):0;
-ctx.fillText(b>=10&&b<=400?b:'–',L+i*bw+bw*0.5,h-6);
+var dt=c.t-C[i-1].t,b=dt>0&&dt<=PAUSE?Math.round(60000/dt):0;
+ctx.fillText(b>=10&&b<=400?b:'–',L+i*bw+bw*0.5,14);
 });
 }
 }
-function stat(k){
-var vs=C.filter(function(c){return c[k]}).map(function(c){return c[k].v});
-if(!vs.length)return '–';
-var s=vs.reduce(function(p,c){return p+c},0)/vs.length;
-return 'последняя '+vs[vs.length-1]+' · среднее '+Math.round(s)+' · мин '+Math.min.apply(null,vs)+' · макс '+Math.max.apply(null,vs);
-}
 function render(){
-draw($('cl'),'l',true);draw($('cr'),'r');
-$('sl').textContent=stat('l');$('sr').textContent=stat('r');
-$('tl').textContent='Левая рука (ниже '+name(split)+')';
+draw($('cl'),'l');draw($('cr'),'r',true);
 $('tr').textContent='Правая рука ('+name(split)+' и выше)';
 }
 function onMsg(ev){
@@ -133,6 +130,7 @@ bind();
 (function(){var s=$('sp');for(var n=48;n<=72;n++){var o=document.createElement('option');o.value=n;o.textContent=name(n)+(n===60?' (до первой октавы)':'');s.appendChild(o)}s.value=60})();
 $('sp').onchange=function(){split=+this.value;C=[];render()};
 $('wn').onchange=function(){WIN=+this.value};
+$('ps').onchange=function(){PAUSE=+this.value;render()};
 $('go').onclick=function(){
 if(!navigator.requestMIDIAccess){$('st').textContent='Этот браузер не поддерживает Web MIDI. Откройте страницу в Chrome.';return}
 navigator.requestMIDIAccess({sysex:true}).catch(function(){return navigator.requestMIDIAccess()}).then(function(a){
@@ -163,7 +161,7 @@ var o=outs();
 if(!o.length){f.textContent='Нет выходного MIDI-порта FP-10.';return}
 syx([1,0,3,6],[1]);
 setTimeout(function(){syx([1,0,5,9],[0])},80);
-f.textContent='Команда отправлена ('+o.map(function(x){return x.name}).join(', ')+'). Если метроном FP-10 не включился, значит FP-10 понимает другой формат.';
+f.textContent='';
 }
 var BPM=80;
 function setTempo(v){
@@ -174,7 +172,7 @@ if(!sx){f.textContent='Браузер не дал доступ к SysEx, ком�
 if(!outs().length){f.textContent='Нет выходного MIDI-порта FP-10.';return}
 syx([1,0,3,6],[1]);
 setTimeout(function(){syx([1,0,3,9],[v>>7,v&127])},60);
-f.textContent='Темп '+v+' отправлен на FP-10. Текущий темп пианино страница не читает, показано последнее отправленное значение.';
+f.textContent='';
 }
 $('bm').onclick=function(){setTempo(BPM-1)};
 $('bp').onclick=function(){setTempo(BPM+1)};
